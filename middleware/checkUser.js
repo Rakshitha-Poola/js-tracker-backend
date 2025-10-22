@@ -16,7 +16,7 @@ export const checkUser = async(req, res, next) => {
     if(!user){
         return res.status(400).json({message:"User not found"})
     }
-
+    req.user = user
     next()
     } catch (error) {
         console.log("Error in checkUser", error)
