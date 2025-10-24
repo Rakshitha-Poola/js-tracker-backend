@@ -9,10 +9,7 @@ import cors from 'cors'
 dotenv.config()
 
 const app = express();
-app.use(cors({
-    origin:[ "https://js-tracker-fullstack.vercel.app", "http://localhost:5173"], // frontend URL
-    credentials: true
-}));
+app.use(cors());
 const port = process.env.PORT || 3000
 app.use(express.json())
 app.use('/api/auth', authRoute)
