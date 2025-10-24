@@ -10,7 +10,7 @@ dotenv.config()
 
 const app = express();
 app.use(cors({
-    origin: "https://js-tracker-fullstack.vercel.app", // frontend URL
+    origin:[ "https://js-tracker-fullstack.vercel.app", "http://localhost:5173"], // frontend URL
     credentials: true
 }));
 const port = process.env.PORT || 3000
