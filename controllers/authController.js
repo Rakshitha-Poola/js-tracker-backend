@@ -97,6 +97,7 @@ export const login = async (req, res) => {
 export const google = async (req, res) => {
   try {
     const { token } = req.body;
+
     const ticket = await client.verifyIdToken({
       idToken: token,
       audience: process.env.GOOGLE_CLIENT_ID,
