@@ -94,45 +94,25 @@ export const login = async (req, res) => {
 };
 
 // --------------------- GOOGLE LOGIN ---------------------
-// --------------------- GOOGLE LOGIN - AUTH CODE FLOW ---------------------
+// --------------------- GOOGLE LOGIN (ID Token Verification) ---------------------
 export const google = async (req, res) => {
   try {
-    const { code } = req.body;
-    if (!code) {
-      return res.status(400).json({ message: "Authorization code missing" });
+    const { token } = req.body; // ✅ using token from Credential response
+
+    if (!token) {
+      return res.status(400).json({ message: "Google token missing" });
     }
 
-    // Exchange code for tokens
-    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        code,
-        client_id: process.env.GOOGLE_CLIENT_ID,
-        client_secret: process.env.GOOGLE_CLIENT_SECRET,
-        redirect_uri: process.env.GOOGLE_REDIRECT_URI,
-        grant_type: "authorization_code",
-      }),
-    });
-
-    const tokenData = await tokenResponse.json();
-
-    if (!tokenData.id_token) {
-      return res.status(401).json({ message: "Failed to exchange auth code" });
-    }
-
-    const { id_token } = tokenData;
-
-    // Verify ID Token
+    // ✅ Verify Google ID Token directly
     const ticket = await client.verifyIdToken({
-      idToken: id_token,
+      idToken: token,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
 
     const payload = ticket.getPayload();
     const { email, name, sub } = payload;
 
-    // Find or Create User
+    // ✅ Check user exists or create new
     let user = await User.findOne({ email });
     if (!user) {
       const role = email === process.env.ADMIN_EMAIL ? "admin" : "user";
@@ -140,8 +120,8 @@ export const google = async (req, res) => {
       await Progress.create({ userId: user._id, topics: [] });
     }
 
-    // Generate your JWT
-    const newToken = jwt.sign(
+    // ✅ Generate your JWT with role
+    const jwtToken = jwt.sign(
       { email: user.email, role: user.role },
       process.env.SECRET_KEY,
       { expiresIn: "7d" }
@@ -149,14 +129,15 @@ export const google = async (req, res) => {
 
     return res.status(200).json({
       message: "Google login successful",
-      token: newToken,
+      token: jwtToken,
       user: { name: user.name, email: user.email, role: user.role },
     });
 
   } catch (error) {
-    console.error("Google Auth Code Error:", error);
+    console.error("Google Auth Error:", error);
     return res.status(500).json({
       message: "Google authentication failed",
     });
   }
 };
+
