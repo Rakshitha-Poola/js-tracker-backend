@@ -94,26 +94,53 @@ export const login = async (req, res) => {
 };
 
 // --------------------- GOOGLE LOGIN ---------------------
+// --------------------- GOOGLE LOGIN - AUTH CODE FLOW ---------------------
 export const google = async (req, res) => {
   try {
-    const { token } = req.body;
+    const { code } = req.body;
+    if (!code) {
+      return res.status(400).json({ message: "Authorization code missing" });
+    }
 
+    // Exchange code for tokens
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: process.env.GOOGLE_REDIRECT_URI,
+        grant_type: "authorization_code",
+      }),
+    });
+
+    const tokenData = await tokenResponse.json();
+
+    if (!tokenData.id_token) {
+      return res.status(401).json({ message: "Failed to exchange auth code" });
+    }
+
+    const { id_token } = tokenData;
+
+    // Verify ID Token
     const ticket = await client.verifyIdToken({
-      idToken: token,
+      idToken: id_token,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
 
     const payload = ticket.getPayload();
     const { email, name, sub } = payload;
 
+    // Find or Create User
     let user = await User.findOne({ email });
-
     if (!user) {
       const role = email === process.env.ADMIN_EMAIL ? "admin" : "user";
       user = await User.create({ name, email, googleId: sub, role });
       await Progress.create({ userId: user._id, topics: [] });
     }
 
+    // Generate your JWT
     const newToken = jwt.sign(
       { email: user.email, role: user.role },
       process.env.SECRET_KEY,
@@ -125,8 +152,11 @@ export const google = async (req, res) => {
       token: newToken,
       user: { name: user.name, email: user.email, role: user.role },
     });
+
   } catch (error) {
-    console.error("Google Auth Error:", error);
-    return res.status(500).json({ message: "Google authentication failed" });
+    console.error("Google Auth Code Error:", error);
+    return res.status(500).json({
+      message: "Google authentication failed",
+    });
   }
 };
