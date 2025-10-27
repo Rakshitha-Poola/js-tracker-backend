@@ -91,50 +91,61 @@ export const getAllTopics = async (req, res) => {
  */
 export const getTopicById = async (req, res) => {
   try {
-    const userId = req.user?._id;
+    const userId = req.user._id;
     const { topicName } = req.params;
-    if (!topicName) return res.status(400).json({ message: "Topic name required" });
 
-    const topic = await Topic.findOne({ topicName }).lean();
-    if (!topic) return res.status(404).json({ message: "Topic not found" });
-
-    let progress = null;
-    if (userId) progress = await Progress.findOne({ userId });
-
-    if (!progress) {
-      progress = new Progress({ userId, topics: [] });
-      await progress.save();
+    if (!topicName) {
+      return res.status(400).json({ message: "Topic name is required" });
     }
 
+    // Fetch topic and progress simultaneously
+    const [topic, progress] = await Promise.all([
+      Topic.findOne({ topicName }, { topicName: 1, questions: 1 }).lean(),
+      Progress.findOne({ userId }).lean(),
+    ]);
+
+    if (!topic) {
+      return res.status(404).json({ message: "Topic not found" });
+    }
+
+    // Ensure progress exists
+    let userProgress = progress;
+    if (!userProgress) {
+      userProgress = await new Progress({ userId, topics: [] }).save();
+    }
+
+    // Find topic-specific progress
     const topicProgress =
-      progress.topics.find(t => t.topicId.toString() === topic._id.toString()) || {
+      userProgress.topics.find((t) => t.topicId?.toString() === topic._id.toString()) || {
         doneQuestions: [],
         bookmarkedQuestions: [],
         notes: [],
       };
 
-    const doneSet = new Set(topicProgress.doneQuestions?.map(String) || []);
-    const bookmarkSet = new Set(topicProgress.bookmarkedQuestions?.map(String) || []);
-    const notesArr = topicProgress.notes || [];
+    // Convert arrays to sets for faster lookup
+    const doneSet = new Set(topicProgress.doneQuestions?.map(String));
+    const bookmarkSet = new Set(topicProgress.bookmarkedQuestions?.map(String));
+    const notesMap = new Map(
+      (topicProgress.notes || []).map((n) => [n.questionId?.toString(), n.text])
+    );
 
-    const questions = topic.questions.map(q => {
-      const qId = q._id.toString();
-      const noteObj = notesArr.find(n => n.questionId?.toString() === qId);
-      return {
-        ...q,
-        Done: doneSet.has(qId),
-        Bookmark: bookmarkSet.has(qId),
-        Notes: noteObj ? noteObj.text : "",
-      };
-    });
+    // Build question array efficiently
+    const questions = topic.questions.map((q) => ({
+      _id: q._id,
+      problem: q.problem,
+      URL: q.URL || "",
+      URL2: q.URL2 || "",
+      Done: doneSet.has(q._id.toString()),
+      Bookmark: bookmarkSet.has(q._id.toString()),
+      Notes: notesMap.get(q._id.toString()) || "",
+    }));
 
-    res.status(200).json({ ...topic, questions });
+    return res.status(200).json({ ...topic, questions });
   } catch (error) {
     console.error("Error in getTopicById:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
-
 /**
  * Update Done / Bookmark / Notes for a question
  */

@@ -107,15 +107,11 @@ export const google = async (req, res) => {
     const { email, name, sub } = payload;
 
     let user = await User.findOne({ email });
+
     if (!user) {
-      // ⚙️ Assign role automatically if it's the admin email
       const role = email === process.env.ADMIN_EMAIL ? "admin" : "user";
-
       user = await User.create({ name, email, googleId: sub, role });
-
-      // 🔹 Create empty Progress document for new Google user
-      const newProgress = new Progress({ userId: user._id, topics: [] });
-      await newProgress.save();
+      await Progress.create({ userId: user._id, topics: [] });
     }
 
     const newToken = jwt.sign(
@@ -124,15 +120,13 @@ export const google = async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    console.log("✅ Google login successful");
     return res.status(200).json({
-      message: "User logged in successfully",
+      message: "Google login successful",
       token: newToken,
       user: { name: user.name, email: user.email, role: user.role },
     });
   } catch (error) {
-    console.log("❌ Error in google Controller:", error);
-    return res.status(500).json({ message: "Internal server error" });
+    console.error("Google Auth Error:", error);
+    return res.status(500).json({ message: "Google authentication failed" });
   }
 };
-
